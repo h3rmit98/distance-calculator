@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Address Distance Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        
+        .container {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #e8f4fc;
+            display: none;
+        }
+        
+        .loading {
+            text-align: center;
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .processing {
+            text-align: center;
+            display: none;
+            margin-top: 20px;
+            background-color: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        .error {
+            color: #e74c3c;
+            margin-top: 10px;
+            display: none;
+            padding: 15px;
+            background-color: #f8d7da;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Address Distance Calculator</h1>
+        <p>Enter two addresses to calculate the straight-line distance between them.</p>
+        
+        <div class="form-group">
+            <label for="address1">First Address:</label>
+            <input type="text" id="address1" placeholder="Enter first address" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="address2">Second Address:</label>
+            <input type="text" id="address2" placeholder="Enter second address" required>
+        </div>
+        
+        <button id="calculate">Calculate Distance</button>
+        
+        <div class="loading" id="loading">
+            <p>Submitting calculation request...</p>
+        </div>
+        
+        <div class="processing" id="processing">
+            <p>Your calculation is being processed. Please wait...</p>
+            <p id="processing-time">Time elapsed: 0 seconds</p>
+        </div>
+        
+        <div class="error" id="error">
+            <p id="error-message">There was an error calculating the distance. Please try again.</p>
+        </div>
+        
+        <div class="result" id="result">
+            <h3>Distance Result</h3>
+            <p id="distance-value"></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const calculateBtn = document.getElementById('calculate');
+            const address1Input = document.getElementById('address1');
+            const address2Input = document.getElementById('address2');
+            const resultDiv = document.getElementById('result');
+            const distanceValue = document.getElementById('distance-value');
+            const loadingDiv = document.getElementById('loading');
+            const processingDiv = document.getElementById('processing');
+            const processingTime = document.getElementById('processing-time');
+            const errorDiv = document.getElementById('error');
+            const errorMessage = document.getElementById('error-message');
+            
+            // API URLs
+            const SUBMIT_URL = 'https://vdk2n9lnt9.execute-api.us-east-1.amazonaws.com/prod/calculate-distance';
+            const RESULTS_URL = 'https://vdk2n9lnt9.execute-api.us-east-1.amazonaws.com/prod/distance-result';
+            
+            let pollingInterval = null;
+            let timeElapsed = 0;
+            let timeCounter = null;
+            let requestCompleted = false;
+            
+            // Reset all UI elements
+            function resetUI() {
+                loadingDiv.style.display = 'none';
+                processingDiv.style.display = 'none';
+                resultDiv.style.display = 'none';
+                errorDiv.style.display = 'none';
+                
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                }
+                
+                if (timeCounter) {
+                    clearInterval(timeCounter);
+                    timeCounter = null;
+                }
+                
+                timeElapsed = 0;
+                processingTime.textContent = 'Time elapsed: 0 seconds';
+                requestCompleted = false;
+            }
+            
+            // Function to update processing time
+            function startTimeCounter() {
+                timeElapsed = 0;
+                timeCounter = setInterval(() => {
+                    timeElapsed += 1;
+                    processingTime.textContent = `Time elapsed: ${timeElapsed} seconds`;
+                }, 1000);
+            }
+            
+            // Function to poll for results
+            function pollForResults(requestId) {
+                requestCompleted = false;
+                
+                pollingInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`${RESULTS_URL}?requestId=${requestId}`);
+                        const data = await response.json();
+                        
+                        // Only check for 'completed' status (not 'success')
+                        if (data.status === 'completed') {
+                            // We got our result
+                            clearInterval(pollingInterval);
+                            clearInterval(timeCounter);
+                            requestCompleted = true;
+                            
+                            processingDiv.style.display = 'none';
+                            resultDiv.style.display = 'block';
+                            
+                            if (data.distance === undefined && data.distance_km !== undefined) {
+                                data.distance = data.distance_km; // Handle field name variation
+                            }
+                            
+                            if (data.distance !== undefined) {
+                                const distanceKm = parseFloat(data.distance);
+                                const distanceMi = distanceKm * 0.621371;
+                                distanceValue.textContent = `The straight-line distance between these addresses is ${distanceKm.toFixed(2)} kilometers (${distanceMi.toFixed(2)} miles).`;
+                            } else {
+                                distanceValue.textContent = 'Distance calculation completed, but no distance value was returned.';
+                            }
+                        } else if (data.status === 'error') {
+                            // Error occurred
+                            clearInterval(pollingInterval);
+                            clearInterval(timeCounter);
+                            requestCompleted = true;
+                            
+                            processingDiv.style.display = 'none';
+                            errorDiv.style.display = 'block';
+                            errorMessage.textContent = data.error || 'An error occurred during processing';
+                        }
+                        // If status is 'processing', continue polling
+                        
+                    } catch (error) {
+                        console.error('Error checking results:', error);
+                        // Don't stop polling on a single error - could be network issue
+                    }
+                }, 2000); // Poll every 2 seconds
+                
+                // Safety timeout after 30 seconds
+                setTimeout(() => {
+                    if (pollingInterval && !requestCompleted) {
+                        clearInterval(pollingInterval);
+                        clearInterval(timeCounter);
+                        
+                        processingDiv.style.display = 'none';
+                        errorDiv.style.display = 'block';
+                        errorMessage.textContent = 'Calculation timed out after 30 seconds. Please try again.';
+                    }
+                }, 30000);
+            }
+            
+            calculateBtn.addEventListener('click', async () => {
+                const address1 = address1Input.value.trim();
+                const address2 = address2Input.value.trim();
+                
+                if (!address1 || !address2) {
+                    alert('Please enter both addresses');
+                    return;
+                }
+                
+                // Reset UI
+                resetUI();
+                
+                // Show loading
+                loadingDiv.style.display = 'block';
+                
+                try {
+                    const response = await fetch(SUBMIT_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            address1: address1,
+                            address2: address2
+                        }),
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('API request failed');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.request_id) {
+                        // Switch to processing state
+                        loadingDiv.style.display = 'none';
+                        processingDiv.style.display = 'block';
+                        
+                        // Start counting time
+                        startTimeCounter();
+                        
+                        // Start polling for results
+                        pollForResults(data.request_id);
+                        
+                    } else if (data.distance !== undefined) {
+                        // Immediate result (synchronous mode)
+                        loadingDiv.style.display = 'none';
+                        resultDiv.style.display = 'block';
+                        
+                        const distanceKm = parseFloat(data.distance);
+                        const distanceMi = distanceKm * 0.621371;
+                        distanceValue.textContent = `The straight-line distance between these addresses is ${distanceKm.toFixed(2)} kilometers (${distanceMi.toFixed(2)} miles).`;
+                    } else {
+                        // Unknown response format
+                        throw new Error('Invalid response format');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error calculating distance:', error);
+                    loadingDiv.style.display = 'none';
+                    errorDiv.style.display = 'block';
+                    errorMessage.textContent = `Error: ${error.message}`;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

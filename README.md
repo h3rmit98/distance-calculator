@@ -3,4 +3,6 @@ An application built to calculate the straight-line distance between two address
 
 The focus for this was to make a distance calculator that utilized serverless/asynchronous infrastructure.
 
+**CURRENTLY TAKEN DOWN SO MY AWS ACCOUNT DOES NOT GET CHARGED - CONTACT ME IF YOU'D LIKE TO SEE THIS WORK**
+
 Go here to test it out: https://d3usydt8l24sf9.cloudfront.net/
